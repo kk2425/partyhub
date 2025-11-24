@@ -13,7 +13,41 @@ import {
   WHO_AM_I_LIST
 } from '../data/gameContent';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// --- SAFE ENVIRONMENT VARIABLE ACCESS ---
+// This helper prevents "process is not defined" errors in browser environments (like Vite on Vercel)
+const getApiKey = (): string | undefined => {
+  // 1. Try Vite standard (import.meta.env)
+  try {
+    // @ts-ignore
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+      // @ts-ignore
+      if (import.meta.env.VITE_API_KEY) return import.meta.env.VITE_API_KEY;
+      // @ts-ignore
+      if (import.meta.env.API_KEY) return import.meta.env.API_KEY;
+    }
+  } catch (e) {
+    // Ignore errors if import.meta is not supported
+  }
+
+  // 2. Try Node/CRA/Webpack standard (process.env)
+  try {
+    if (typeof process !== 'undefined' && process.env) {
+      if (process.env.REACT_APP_API_KEY) return process.env.REACT_APP_API_KEY;
+      if (process.env.NEXT_PUBLIC_API_KEY) return process.env.NEXT_PUBLIC_API_KEY;
+      if (process.env.API_KEY) return process.env.API_KEY;
+    }
+  } catch (e) {
+    // Ignore errors
+  }
+
+  return undefined;
+};
+
+const API_KEY = getApiKey();
+
+// Initialize with the key if found, or a dummy string to prevent immediate init crash.
+// (We handle the missing key check in the generate function)
+const ai = new GoogleGenAI({ apiKey: API_KEY || "dummy_key" });
 
 // Hybrid Logic: 
 // We want to mix the curated static lists with fresh AI generations.
@@ -21,8 +55,7 @@ export const generateGameContent = async (mode: GameMode, players: string[], pre
   
   // 50% chance to use AI if API key is present. 
   // If no API key, always use static.
-  // All modes now have static lists for robustness.
-  const useAI = process.env.API_KEY && Math.random() > 0.5;
+  const useAI = !!API_KEY && Math.random() > 0.5;
 
   // Note: For the new modes (Rapid Fire, etc), we are currently preferring static lists 
   // because the user provided specific high-quality content. 
@@ -145,6 +178,8 @@ function getUniqueContent<T>(
 // --- AI GENERATION LOGIC ---
 
 async function generateFromAI(mode: GameMode, players: string[], previousContext: string[]): Promise<GameContent> {
+  if (!API_KEY) throw new Error("No API Key");
+
   const contextStr = previousContext.slice(-5).join(" | ");
   
   let systemInstruction = "You are a party game host for Indian college students (21yo). Keep it fun, moderately spicy but safe, and engaging. No emojis in the output text.";
