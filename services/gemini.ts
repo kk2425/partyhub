@@ -16,31 +16,34 @@ import {
 // --- SAFE ENVIRONMENT VARIABLE ACCESS ---
 // This helper prevents "process is not defined" errors in browser environments (like Vite on Vercel)
 const getApiKey = (): string | undefined => {
-  // 1. Try Vite standard (import.meta.env)
-  try {
-    // @ts-ignore
-    if (typeof import.meta !== 'undefined' && import.meta.env) {
+  // Helper to safely access process.env without crashing
+  const getProcessEnv = (key: string) => {
+    try {
       // @ts-ignore
-      if (import.meta.env.VITE_API_KEY) return import.meta.env.VITE_API_KEY;
+      return typeof process !== 'undefined' && process.env ? process.env[key] : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+
+  // Helper to safely access import.meta.env (Vite standard)
+  const getMetaEnv = (key: string) => {
+    try {
       // @ts-ignore
-      if (import.meta.env.API_KEY) return import.meta.env.API_KEY;
+      return typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env[key] : undefined;
+    } catch {
+      return undefined;
     }
-  } catch (e) {
-    // Ignore errors if import.meta is not supported
-  }
+  };
 
-  // 2. Try Node/CRA/Webpack standard (process.env)
-  try {
-    if (typeof process !== 'undefined' && process.env) {
-      if (process.env.REACT_APP_API_KEY) return process.env.REACT_APP_API_KEY;
-      if (process.env.NEXT_PUBLIC_API_KEY) return process.env.NEXT_PUBLIC_API_KEY;
-      if (process.env.API_KEY) return process.env.API_KEY;
-    }
-  } catch (e) {
-    // Ignore errors
-  }
-
-  return undefined;
+  // Check all possible naming conventions
+  return (
+    getMetaEnv('VITE_API_KEY') ||
+    getMetaEnv('API_KEY') ||
+    getProcessEnv('REACT_APP_API_KEY') ||
+    getProcessEnv('NEXT_PUBLIC_API_KEY') ||
+    getProcessEnv('API_KEY')
+  );
 };
 
 const API_KEY = getApiKey();
