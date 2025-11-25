@@ -47,7 +47,7 @@ export type GameContent =
   | { type: GameMode.BOLLYWOOD_HINTS; movie: string; hints: string[] }
   | { type: GameMode.TABOO; word: string; forbidden: string[] }
   | { type: GameMode.IMPOSTER; category: string; word: string; imposterWord: string }
-  | { type: GameMode.RAPID_FIRE; question: string }
+  | { type: GameMode.RAPID_FIRE; question: string; answer?: string | null }
   | { type: GameMode.FINISH_THE_LYRICS; line: string; answer: string; song: string }
   | { type: GameMode.CATEGORY_STORM; category: string }
   | { type: GameMode.WHO_AM_I; riddle: string; answer: string }

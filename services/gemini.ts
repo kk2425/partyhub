@@ -125,8 +125,19 @@ function generateFromStatic(mode: GameMode, history: string[]): GameContent {
       };
     }
     
-    case GameMode.RAPID_FIRE:
-      return getUniqueContent(RAPID_FIRE_LIST, history, (question) => ({ type: GameMode.RAPID_FIRE, question }));
+    case GameMode.RAPID_FIRE: {
+        const available = RAPID_FIRE_LIST.filter(item => !history.includes(item.question));
+        const selection = available.length > 0
+            ? available[Math.floor(Math.random() * available.length)]
+            : RAPID_FIRE_LIST[Math.floor(Math.random() * RAPID_FIRE_LIST.length)];
+        
+        return {
+            type: GameMode.RAPID_FIRE,
+            question: selection.question,
+            // Firebase does not accept undefined, so we default to null
+            answer: selection.answer ?? null
+        };
+    }
       
     case GameMode.CATEGORY_STORM:
       return getUniqueContent(CATEGORY_STORM_LIST, history, (category) => ({ type: GameMode.CATEGORY_STORM, category }));

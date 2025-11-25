@@ -83,11 +83,17 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const startGame = async (mode: GameMode) => {
         if (!state) return;
         
+        let totalRounds = 10;
+        if (mode === GameMode.CATEGORY_STORM) {
+            totalRounds = 12;
+        }
+
         // Optimistic update
         RoomService.updateRoomState(state.roomCode, { 
             status: 'PLAYING', 
             currentMode: mode, 
             isLoadingContent: true,
+            totalRounds: totalRounds,
             categorySubmissions: [] // Clear submissions
         });
 

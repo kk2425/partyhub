@@ -5,7 +5,7 @@ import { useGame } from '../context/GameContext';
 import { GameMode, GameContent } from '../types';
 import Button from '../components/Button';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, CheckCircle, XCircle, Trophy } from 'lucide-react';
+import { Send, CheckCircle, XCircle, Trophy, FastForward } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const GameRoom: React.FC = () => {
@@ -13,6 +13,8 @@ const GameRoom: React.FC = () => {
   const navigate = useNavigate();
   const [showAnswer, setShowAnswer] = useState(false);
   const [timer, setTimer] = useState<number | null>(null);
+  const [maxTime, setMaxTime] = useState<number>(60);
+  const [breakTimer, setBreakTimer] = useState<number | null>(null);
   
   // Category Storm Specific State
   const [categoryInput, setCategoryInput] = useState("");
@@ -25,23 +27,28 @@ const GameRoom: React.FC = () => {
     }
   }, [state?.status, navigate]);
 
-  // Reset local state when content changes
+  // Reset local state when ROUND changes (Fix for timer resetting on submissions)
   useEffect(() => {
     setShowAnswer(false);
     setCategoryInput("");
     setInputStatus('idle');
+    setBreakTimer(null); // Reset break timer on new round
     
     // Set timers based on mode
     if (state?.currentContent?.type === GameMode.RAPID_FIRE) {
         setTimer(5);
+        setMaxTime(5);
     } else if (state?.currentContent?.type === GameMode.CATEGORY_STORM) {
-        setTimer(60);
+        setTimer(45);
+        setMaxTime(45);
     } else if (state?.currentContent?.type === GameMode.FINISH_THE_LYRICS) {
         setTimer(45);
+        setMaxTime(45);
     } else {
         setTimer(null);
     }
-  }, [state?.currentContent, state?.currentRound]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state?.currentRound]);
 
   // Countdown timer logic
   useEffect(() => {
@@ -54,6 +61,38 @@ const GameRoom: React.FC = () => {
     return () => clearInterval(interval);
   }, [timer]);
 
+  const isHost = state?.players.find(p => p.id === currentPlayerId)?.isHost;
+  
+  // Logic for Auto-Advance in Category Storm
+  useEffect(() => {
+      // Start break timer when main timer hits 0 in Category Storm
+      if (timer === 0 && state?.currentMode === GameMode.CATEGORY_STORM && breakTimer === null) {
+          setBreakTimer(10); // 10 seconds break to view results
+      }
+  }, [timer, state?.currentMode, breakTimer]);
+
+  useEffect(() => {
+      // Countdown break timer
+      if (breakTimer !== null && breakTimer > 0) {
+          const interval = setInterval(() => {
+              setBreakTimer(prev => (prev !== null && prev > 0 ? prev - 1 : 0));
+          }, 1000);
+          return () => clearInterval(interval);
+      }
+      
+      // When break timer hits 0, trigger next round (Host Only)
+      if (breakTimer === 0 && isHost && state?.currentMode === GameMode.CATEGORY_STORM) {
+          // Clear break timer to prevent double trigger
+          setBreakTimer(null); 
+          if ((state.currentRound || 0) < (state.totalRounds || 10)) {
+              handleNext();
+          } else {
+              handleEnd();
+          }
+      }
+  }, [breakTimer, isHost, state?.currentMode, state?.currentRound, state?.totalRounds]);
+
+
   if (!state || !state.currentContent) {
     return (
         <div className="flex items-center justify-center h-full">
@@ -62,7 +101,6 @@ const GameRoom: React.FC = () => {
     );
   }
 
-  const isHost = state.players.find(p => p.id === currentPlayerId)?.isHost;
   const content = state.currentContent;
 
   const handleNext = () => {
@@ -269,8 +307,24 @@ const GameRoom: React.FC = () => {
                     }`}>
                         {timer}
                     </div>
-                    
-                    <p className="text-slate-400">Answer before the timer hits zero!</p>
+
+                    {content.answer ? (
+                        <div className="min-h-[100px] flex items-center justify-center">
+                            {!showAnswer ? (
+                                isHost && (
+                                    <Button variant="secondary" onClick={() => setShowAnswer(true)}>
+                                        Reveal Answer
+                                    </Button>
+                                )
+                            ) : (
+                                <div className="text-3xl font-bold text-green-400 animate-scale-in bg-white/10 px-6 py-4 rounded-xl border border-green-500/30">
+                                    {content.answer}
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <p className="text-slate-400">Answer before the timer hits zero!</p>
+                    )}
                 </div>
             );
 
@@ -332,13 +386,19 @@ const GameRoom: React.FC = () => {
             if (roundOver) {
                 return (
                      <div className="text-center space-y-6 animate-fade-in-up w-full max-w-md mx-auto">
-                        <h2 className="text-3xl font-bold text-blue-300 uppercase tracking-widest">Time's Up!</h2>
+                        <div className="flex items-center justify-between mb-2">
+                             <h2 className="text-3xl font-bold text-blue-300 uppercase tracking-widest">Time's Up!</h2>
+                             <div className="bg-white/10 px-3 py-1 rounded-full text-sm font-mono flex items-center gap-2">
+                                <span className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></span>
+                                Next: {breakTimer}s
+                             </div>
+                        </div>
                         
                         <div className="bg-white/5 rounded-2xl overflow-hidden border border-white/10">
                             <div className="bg-blue-600/20 p-4 border-b border-white/10">
                                 <h3 className="font-bold flex items-center justify-center gap-2"><Trophy size={18}/> Round Results</h3>
                             </div>
-                            <div className="max-h-[50vh] overflow-y-auto">
+                            <div className="max-h-[40vh] overflow-y-auto">
                                 {roundStats.map((p, i) => (
                                     <div key={p.id} className="flex items-center justify-between p-4 border-b border-white/5 last:border-0">
                                         <div className="flex items-center gap-3">
@@ -354,6 +414,12 @@ const GameRoom: React.FC = () => {
                                 ))}
                             </div>
                         </div>
+                        
+                        {isHost && (
+                             <Button onClick={handleNext} variant="secondary" className="w-full text-sm py-2">
+                                <FastForward size={16} /> Skip Wait
+                             </Button>
+                        )}
                      </div>
                 );
             }
@@ -375,7 +441,7 @@ const GameRoom: React.FC = () => {
                                     stroke={ (timer || 0) < 10 ? '#ef4444' : '#3b82f6' } 
                                     strokeWidth="4" fill="none" 
                                     strokeDasharray={175}
-                                    strokeDashoffset={175 - (175 * (timer || 0)) / 60}
+                                    strokeDashoffset={175 - (175 * (timer || 0)) / maxTime}
                                     className="transition-all duration-1000 linear"
                                 />
                             </svg>
@@ -509,21 +575,31 @@ const GameRoom: React.FC = () => {
              <Button variant="danger" onClick={handleEnd} disabled={state.isLoadingContent} className="px-4">
                 End
              </Button>
-             <Button 
-                onClick={handleNext} 
-                isLoading={state.isLoadingContent}
-                className="flex-grow max-w-sm text-lg py-4 shadow-xl shadow-indigo-500/20"
-            >
-                {state.currentRound >= state.totalRounds ? 'Finish Game' : 'Next Round →'}
-             </Button>
+             
+             {/* Hide Next button during break timer for Category Storm as it auto-advances, but allow manual skip */}
+             {state.currentMode === GameMode.CATEGORY_STORM && breakTimer !== null ? null : (
+                 <Button 
+                    onClick={handleNext} 
+                    isLoading={state.isLoadingContent}
+                    className="flex-grow max-w-sm text-lg py-4 shadow-xl shadow-indigo-500/20"
+                >
+                    {state.currentRound >= state.totalRounds ? 'Finish Game' : 'Next Round →'}
+                 </Button>
+             )}
         </div>
       )}
       
       {!isHost && (
          <div className="fixed bottom-8 left-0 right-0 text-center px-4">
-            <div className="bg-black/40 backdrop-blur-md py-3 px-6 rounded-full inline-block border border-white/5 text-slate-400 animate-pulse">
-                Waiting for host...
-            </div>
+            {state.currentMode === GameMode.CATEGORY_STORM && breakTimer !== null ? (
+                <div className="bg-blue-600/40 backdrop-blur-md py-3 px-6 rounded-full inline-block border border-white/5 text-white animate-pulse">
+                    Next category in {breakTimer}s...
+                </div>
+            ) : (
+                <div className="bg-black/40 backdrop-blur-md py-3 px-6 rounded-full inline-block border border-white/5 text-slate-400 animate-pulse">
+                    Waiting for host...
+                </div>
+            )}
          </div>
       )}
     </div>
